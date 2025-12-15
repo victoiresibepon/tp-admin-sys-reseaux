@@ -1,0 +1,9 @@
+# Copier ce fichier en terraform.tfvars et remplir vos valeurs
+
+server_ip              = "203.0.113.10"
+ssh_user               = "root"
+ssh_port               = 22
+ssh_private_key_path   = "~/.ssh/id_rsa"
+script_path            = "../partie1-bash-script/create_users.sh"
+users_file_path        = "../partie1-bash-script/users.txt"
+group_name             = "students-inf-361"

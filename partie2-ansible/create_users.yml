@@ -1,0 +1,177 @@
+---
+- name: Création automatisée des utilisateurs Linux
+  hosts: vps_servers
+  become: yes
+  vars:
+    group_name: "students-inf-361"
+    users_file: "users.csv"
+    smtp_host: "smtp.gmail.com"
+    smtp_port: 587
+    smtp_user: "votre.email@gmail.com"
+    smtp_password: "votre_mot_de_passe_app"
+    
+  tasks:
+    - name: Installer les packages nécessaires
+      apt:
+        name:
+          - quota
+          - quotatool
+          - zsh
+          - fish
+          - mailutils
+          - python3-pip
+        state: present
+        update_cache: yes
+
+    - name: Installer le module Python pour email
+      pip:
+        name: 
+          - passlib
+        state: present
+
+    - name: Créer le groupe principal
+      group:
+        name: "{{ group_name }}"
+        state: present
+
+    - name: Configurer sudoers pour bloquer su
+      copy:
+        dest: "/etc/sudoers.d/{{ group_name }}_nosu"
+        content: |
+          %{{ group_name }} ALL=(ALL:ALL) ALL, !/bin/su, !/usr/bin/su
+        mode: '0440'
+        validate: 'visudo -cf %s'
+
+    - name: Lire le fichier CSV des utilisateurs
+      read_csv:
+        path: "{{ users_file }}"
+      register: users_data
+      delegate_to: localhost
+
+    - name: Créer les utilisateurs
+      user:
+        name: "{{ item.username }}"
+        comment: "{{ item.fullname }},{{ item.phone }},{{ item.email }}"
+        shell: "{{ item.shell }}"
+        groups: "{{ group_name }},sudo"
+        append: yes
+        create_home: yes
+        state: present
+      loop: "{{ users_data.list }}"
+      register: user_creation
+
+    - name: Configurer les mots de passe
+      user:
+        name: "{{ item.username }}"
+        password: "{{ item.password | password_hash('sha512') }}"
+        update_password: always
+      loop: "{{ users_data.list }}"
+
+    - name: Forcer le changement de mot de passe
+      command: chage -d 0 {{ item.username }}
+      loop: "{{ users_data.list }}"
+
+    - name: Créer le fichier WELCOME.txt
+      copy:
+        dest: "/home/{{ item.username }}/WELCOME.txt"
+        content: |
+          ╔════════════════════════════════════════════════════════════╗
+          ║          BIENVENUE SUR LE SERVEUR INF 3611                 ║
+          ╚════════════════════════════════════════════════════════════╝
+          
+          Bonjour {{ item.fullname }},
+          
+          Votre compte a été créé avec succès !
+          
+          📧 Email: {{ item.email }}
+          📱 WhatsApp: {{ item.phone }}
+          👤 Username: {{ item.username }}
+          🏠 Répertoire: /home/{{ item.username }}
+          
+          💾 Quota disque: 15 Go maximum
+          🧠 Limite RAM par processus: 20%
+          
+          Pour votre sécurité:
+          - Changez votre mot de passe dès la première connexion
+          - Utilisez des mots de passe forts
+          - Ne partagez jamais vos identifiants
+          
+          ════════════════════════════════════════════════════════════
+        owner: "{{ item.username }}"
+        group: "{{ item.username }}"
+        mode: '0644'
+      loop: "{{ users_data.list }}"
+
+    - name: Ajouter l'affichage du message dans .bashrc
+      lineinfile:
+        path: "/home/{{ item.username }}/.bashrc"
+        line: "cat ~/WELCOME.txt"
+        create: yes
+        owner: "{{ item.username }}"
+        group: "{{ item.username }}"
+      loop: "{{ users_data.list }}"
+
+    - name: Configurer les quotas disque (15 Go)
+      command: setquota -u {{ item.username }} 14680064 15728640 0 0 /
+      loop: "{{ users_data.list }}"
+      ignore_errors: yes
+
+    - name: Calculer la limite RAM (20%)
+      shell: awk '/MemTotal/ {print int($2 * 0.2)}' /proc/meminfo
+      register: ram_limit
+      changed_when: false
+
+    - name: Configurer les limites de ressources
+      copy:
+        dest: "/etc/security/limits.d/{{ item.username }}_limits.conf"
+        content: |
+          {{ item.username }} soft rss {{ ram_limit.stdout }}
+          {{ item.username }} hard rss {{ ram_limit.stdout }}
+          {{ item.username }} soft nproc 100
+          {{ item.username }} hard nproc 150
+        mode: '0644'
+      loop: "{{ users_data.list }}"
+
+    - name: Envoyer email de bienvenue
+      mail:
+        host: "{{ smtp_host }}"
+        port: "{{ smtp_port }}"
+        username: "{{ smtp_user }}"
+        password: "{{ smtp_password }}"
+        to: "{{ item.email }}"
+        subject: "Votre compte sur le serveur VPS - INF 3611"
+        body: |
+          Bonjour {{ item.fullname }},
+          
+          Votre compte utilisateur a été créé avec succès sur notre serveur VPS.
+          
+          Informations de connexion:
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          🖥️  Adresse IP du serveur: {{ server_ip }}
+          🔌 Port SSH: {{ ssh_port }}
+          👤 Nom d'utilisateur: {{ item.username }}
+          🔑 Mot de passe initial: {{ item.password }}
+          
+          Commande de connexion SSH:
+          ssh -p {{ ssh_port }} {{ item.username }}@{{ server_ip }}
+          
+          Pour transmettre votre clé publique SSH:
+          
+          • Linux/Mac:
+            ssh-copy-id -p {{ ssh_port }} {{ item.username }}@{{ server_ip }}
+          
+          • Windows (PowerShell):
+            type $env:USERPROFILE\.ssh\id_rsa.pub | ssh -p {{ ssh_port }} {{ item.username }}@{{ server_ip }} "cat >> .ssh/authorized_keys"
+          
+          • Ou manuellement:
+            cat ~/.ssh/id_rsa.pub | ssh -p {{ ssh_port }} {{ item.username }}@{{ server_ip }} "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+          
+          ⚠️  IMPORTANT:
+          Vous serez invité à changer votre mot de passe lors de votre première connexion.
+          
+          Cordialement,
+          L'équipe INF 3611
+        charset: utf8
+      loop: "{{ users_data.list }}"
+      ignore_errors: yes
+      delegate_to: localhost

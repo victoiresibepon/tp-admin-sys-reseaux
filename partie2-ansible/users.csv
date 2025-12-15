@@ -1,0 +1,5 @@
+username,password,fullname,phone,email,shell
+alice,Pass123!,Alice Dupont,+237690123456,alice.dupont@email.com,/bin/bash
+bob,SecureP@ss,Bob Martin,+237691234567,bob.martin@email.com,/bin/zsh
+charlie,Charlie2024,Charlie Nguyen,+237692345678,charlie.nguyen@email.com,/usr/bin/fish
+diana,DianaPass!,Diana Kamga,+237693456789,diana.kamga@email.com,/bin/bash
