@@ -24,9 +24,9 @@
         update_cache: yes
 
     - name: Installer le module Python pour email
-      pip:
+      apt:
         name: 
-          - passlib
+          - python3-passlib
         state: present
 
     - name: Créer le groupe principal

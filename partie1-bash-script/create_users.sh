@@ -20,10 +20,10 @@ fi
 
 GROUP_NAME="$1"
 USERS_FILE="$2"
-LOG_FILE="./logs/creation_$(date +%Y%m%d_%H%M%S).log"
+LOG_FILE="/tmp/logs/creation_$(date +%Y%m%d_%H%M%S).log"
 
 # Créer le dossier logs
-mkdir -p logs
+mkdir -p /tmp/logs
 
 # Fonction de logging
 log() {

@@ -13,18 +13,17 @@ resource "null_resource" "ssh_connection" {
   connection {
     type        = "ssh"
     host        = var.server_ip
-    user        = var.ssh_user
-    private_key = file(var.ssh_private_key_path)
+    user        = "debo24"
+    private_key = file("/home/debo24/.ssh/id_rsa")
     port        = var.ssh_port
   }
 
-  # Copier le script sur le serveur
+  # Copier le script et le fichier users.txt
   provisioner "file" {
     source      = var.script_path
     destination = "/tmp/create_users.sh"
   }
 
-  # Copier le fichier users.txt
   provisioner "file" {
     source      = var.users_file_path
     destination = "/tmp/users.txt"
@@ -37,25 +36,25 @@ resource "null_resource" "ssh_connection" {
     ]
   }
 
-  # Rendre le script exécutable et l'exécuter
+  # Rendre le script exécutable et l'exécuter en root
   provisioner "remote-exec" {
     inline = [
       "chmod +x /tmp/create_users.sh",
-      "/tmp/create_users.sh ${var.group_name} /tmp/users.txt"
+      "sudo /tmp/create_users.sh ${var.group_name} /tmp/users.txt"
     ]
   }
 
   # Récupérer les logs après exécution
   provisioner "local-exec" {
-    command = "scp -P ${var.ssh_port} -i ${var.ssh_private_key_path} ${var.ssh_user}@${var.server_ip}:/tmp/logs/* ./logs/ || true"
-  }
+  command = "mkdir -p ./logs && scp -P ${var.ssh_port} -i ${var.ssh_private_key_path} debo24@${var.server_ip}:/tmp/logs/* ./logs/"
+}
 
   triggers = {
     always_run = timestamp()
   }
 }
 
-# Output pour confirmer l'exécution
+# Outputs
 output "execution_status" {
   value = "Script exécuté avec succès sur ${var.server_ip}"
 }
@@ -63,3 +62,4 @@ output "execution_status" {
 output "log_location" {
   value = "Les logs ont été récupérés dans ./logs/"
 }
+
